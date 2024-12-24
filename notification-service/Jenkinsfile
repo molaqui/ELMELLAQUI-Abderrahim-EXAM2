@@ -1,0 +1,64 @@
+pipeline {
+    agent any
+
+    environment {
+        DOCKERHUB_CREDENTIALS = credentials('enami_dockerhub')
+        KUBECONFIG = credentials('kubernetes')
+        KUBECONFIG_CREDENTIALS_ID = 'kubernetes'
+    }
+
+    stages {
+        stage('Build') {
+            steps {
+                script {
+                    echo "Building notification-service"
+                    bat "cd notification-service && mvn clean package"
+                }
+            }
+        }
+
+        stage('Login to Docker Hub') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'enami_dockerhub',
+                                                  usernameVariable: 'DOCKERHUB_CREDENTIALS_USR',
+                                                  passwordVariable: 'DOCKERHUB_CREDENTIALS_PSW')]) {
+                    echo "Docker Username: ${DOCKERHUB_CREDENTIALS_USR}"
+                    writeFile file: 'docker_token.txt', text: "${DOCKERHUB_CREDENTIALS_PSW}"
+
+                    bat """
+                        docker login -u ${DOCKERHUB_CREDENTIALS_USR} --password-stdin < docker_token.txt
+                    """
+                }
+            }
+        }
+
+        stage('Push Docker Image') {
+            steps {
+                script {
+                    def microservice = 'notification-service' // Pas de conversion en minuscule
+                    echo "Building and pushing Docker image for ${microservice}"
+
+                    bat """
+                        cd ${microservice}
+                        docker build -t enamifatimazahrae2001/${microservice}:latest .
+                        docker push enamifatimazahrae2001/${microservice}:latest
+                    """
+                }
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+                    steps {
+                        script {
+                             withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: 'KUBECONFIG')]) {
+                                bat '''
+                                   cd notification-service && kubectl --kubeconfig=%KUBECONFIG% apply -f deployment-notification-service.yml --validate=false
+                                '''
+                            }
+                        }
+                    }
+        }
+
+
+    }
+}

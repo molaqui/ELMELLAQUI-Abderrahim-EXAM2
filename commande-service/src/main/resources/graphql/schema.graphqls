@@ -1,0 +1,10 @@
+type Order {
+    id: ID!
+    productId: ID!
+    quantity: Int!
+    status: String!
+}
+
+type Mutation {
+    createOrder(productId: ID!, quantity: Int!): String
+}
